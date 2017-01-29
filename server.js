@@ -3,6 +3,8 @@
 
 var express = require('express');
 var expressSession = require('express-session');
+var lo = require('lodash');
+var morgan = require('morgan');
 var passport = require('passport');
 var path = require('path');
 
@@ -17,9 +19,10 @@ var prodStrategy = new SalesforceStrategy({
 }, utils.user.setup);
 
 var session_options = {
-    secret: process.env.SESSION_SECRET,
+    //maxAge: 600000,
     resave: true,
-    saveUninitialized: true
+    saveUninitialized: false,
+    secret: process.env.SESSION_SECRET
 };
 
 var mongoUrl;
@@ -39,6 +42,25 @@ if (mongoUrl) {
         url: mongoUrl
     });
 }
+
+var BOWER_JS = [
+    'jquery/dist/',
+    'bootstrap/dist/js',
+    'angular',
+    'angular-ui-router/release',
+    'angular-bootstrap',
+    'lodash/dist'
+];
+
+var BOWER_CSS = [
+    'bootstrap/dist/css',
+    'font-awesome/css/'
+];
+
+var BOWER_FONTS = [
+    'bootstrap/dist/fonts',
+    'font-awesome/fonts/'
+];
 
 var SFDCApps = function () {
     'use strict';
@@ -106,12 +128,21 @@ var SFDCApps = function () {
     self.initializeServer = function () {
         self.app = express();
 
-        self.app.use('/static', utils.security.redirectSec, express.static('static'));
+        //self.app.use(morgan('short'));
+
         self.app.use('/.well-known/acme-challenge/', utils.security.redirectSec, express.static('static/.well-known/acme-challenge'));
-        self.app.use('/js', express.static(__dirname + '/bower_components/jquery/dist/'));
-        self.app.use('/js', express.static(__dirname + '/bower_components/boostrap/dist/js'));
-        self.app.use('/css', express.static(__dirname + '/bower_components/boostrap/dist/css'));
-        self.app.use('/fonts', express.static(__dirname + '/bower_components/boostrap/dist/fonts'));
+
+        lo.each(BOWER_JS, function (dir) {
+            self.app.use('/js', utils.security.redirectSec, express.static(__dirname + '/bower_components/' + dir));
+        });
+
+        lo.each(BOWER_CSS, function (dir) {
+            self.app.use('/css', utils.security.redirectSec, express.static(__dirname + '/bower_components/' + dir));
+        });
+
+        lo.each(BOWER_FONTS, function (dir) {
+            self.app.use('/fonts', utils.security.redirectSec, express.static(__dirname + '/bower_components/' + dir));
+        });
 
         self.app.use(expressSession(session_options));
         self.app.use(passport.initialize());
@@ -120,6 +151,8 @@ var SFDCApps = function () {
         self.app.get('/auth/prod/authorize', passport.authenticate('salesforce', {session: true}));
         self.app.get('/auth/prod/callback', passport.authenticate('salesforce', {session: true}), utils.security.redirectPostLogin);
         self.app.use('/api', require('./lib/api.js'));
+
+        self.app.use('/objdesc', utils.security.redirectSec, utils.user.ensureAuthenticated, express.static('app_static/objdesc'));
     };
 
     self.initialize = function () {
